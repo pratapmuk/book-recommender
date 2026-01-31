@@ -147,7 +147,7 @@ class SheetsExporter:
 
         if data["positions"]:
             # Header row
-            values.append(["Ticker", "Market", "Position", "Contracts", "Exposure", "Realized P&L"])
+            values.append(["Ticker", "Market", "Position", "Contracts", "Exposure", "Realized P&L", "Timestamp"])
 
             # Position rows
             for pos in data["positions"]:
@@ -161,6 +161,7 @@ class SheetsExporter:
                     pos["contracts"],
                     f"${pos['market_exposure_dollars']:,.2f}",
                     pnl_str,
+                    timestamp,
                 ])
         else:
             values.append(["No open positions"])
@@ -223,7 +224,7 @@ class SheetsExporter:
                         "sheetId": 0,
                         "dimension": "COLUMNS",
                         "startIndex": 0,
-                        "endIndex": 6,
+                        "endIndex": 7,
                     }
                 }
             },
