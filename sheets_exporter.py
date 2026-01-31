@@ -95,6 +95,7 @@ class SheetsExporter:
         self,
         reporter: PortfolioReporter,
         spreadsheet_id: Optional[str] = None,
+        append: bool = False,
     ) -> str:
         """
         Export portfolio data to Google Sheets.
@@ -102,6 +103,7 @@ class SheetsExporter:
         Args:
             reporter: PortfolioReporter instance with data
             spreadsheet_id: Existing spreadsheet ID, or None to create new
+            append: If True, append data below existing content
 
         Returns:
             URL to the spreadsheet
@@ -117,13 +119,20 @@ class SheetsExporter:
         if not spreadsheet_id:
             title = f"Kalshi Portfolio - {datetime.now().strftime('%Y-%m-%d')}"
             spreadsheet_id = self.create_spreadsheet(title)
+            append = False  # New sheet, no need to append
 
         # Prepare the data rows
         values = []
 
-        # Header section
-        values.append(["KALSHI PORTFOLIO REPORT"])
-        values.append([f"Generated: {timestamp}"])
+        if append:
+            # Add separator and timestamp for appended data
+            values.append([])
+            values.append(["---"])
+            values.append([f"UPDATE: {timestamp}"])
+        else:
+            # Header section for new sheet
+            values.append(["KALSHI PORTFOLIO REPORT"])
+            values.append([f"Generated: {timestamp}"])
         values.append([])
 
         # Balance section
@@ -158,15 +167,27 @@ class SheetsExporter:
 
         # Write to sheet
         body = {"values": values}
-        self.service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range="A1",
-            valueInputOption="RAW",
-            body=body,
-        ).execute()
 
-        # Format the spreadsheet
-        self._apply_formatting(spreadsheet_id, len(values))
+        if append:
+            # Append below existing data
+            self.service.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id,
+                range="A1",
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body=body,
+            ).execute()
+        else:
+            # Overwrite from the beginning
+            self.service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range="A1",
+                valueInputOption="RAW",
+                body=body,
+            ).execute()
+
+            # Format the spreadsheet (only on new sheets)
+            self._apply_formatting(spreadsheet_id, len(values))
 
         return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
 
@@ -217,6 +238,7 @@ def export_to_sheets(
     reporter: PortfolioReporter,
     spreadsheet_id: Optional[str] = None,
     credentials_path: str = "credentials.json",
+    append: bool = False,
 ) -> str:
     """
     Convenience function to export portfolio to Google Sheets.
@@ -225,10 +247,11 @@ def export_to_sheets(
         reporter: PortfolioReporter instance
         spreadsheet_id: Existing spreadsheet ID, or None to create new
         credentials_path: Path to Google OAuth credentials
+        append: If True, append data below existing content
 
     Returns:
         URL to the spreadsheet
     """
     exporter = SheetsExporter(credentials_path=credentials_path)
     exporter.authenticate()
-    return exporter.export_portfolio(reporter, spreadsheet_id)
+    return exporter.export_portfolio(reporter, spreadsheet_id, append=append)

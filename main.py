@@ -140,11 +140,22 @@ Environment Variables:
         if args.sheets:
             from sheets_exporter import export_to_sheets
 
-            print("Exporting to Google Sheets...")
+            # Get spreadsheet ID from args or environment
+            spreadsheet_id = args.spreadsheet_id or os.getenv("KALSHI_SPREADSHEET_ID")
+
+            # Append to existing sheet if spreadsheet_id is provided
+            append = spreadsheet_id is not None
+
+            if append:
+                print("Appending to existing Google Sheet...")
+            else:
+                print("Creating new Google Sheet...")
+
             url = export_to_sheets(
                 reporter,
-                spreadsheet_id=args.spreadsheet_id,
+                spreadsheet_id=spreadsheet_id,
                 credentials_path=args.credentials,
+                append=append,
             )
             print(f"Portfolio exported successfully!")
             print(f"View it here: {url}")
