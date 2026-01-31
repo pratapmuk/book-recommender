@@ -159,7 +159,7 @@ class SheetsExporter:
                     pos["market_title"],
                     pos["position_type"],
                     pos["contracts"],
-                    f"${pos['market_exposure_dollars']:,.2f}",
+                    pos["market_exposure_dollars"],
                     pnl_str,
                     timestamp,
                 ])
