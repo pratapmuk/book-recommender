@@ -57,6 +57,7 @@ Examples:
   python main.py                    # Show full portfolio report
   python main.py --balance-only     # Show only balance info
   python main.py --json             # Output as JSON
+  python main.py --sheets           # Export to Google Sheets
   python main.py --demo             # Use demo API endpoint
 
 Environment Variables:
@@ -96,6 +97,25 @@ Environment Variables:
         help="Path to private key file (overrides environment variable)",
     )
 
+    parser.add_argument(
+        "--sheets",
+        action="store_true",
+        help="Export portfolio to Google Sheets",
+    )
+
+    parser.add_argument(
+        "--spreadsheet-id",
+        type=str,
+        help="Existing Google Sheets spreadsheet ID to update (creates new if not provided)",
+    )
+
+    parser.add_argument(
+        "--credentials",
+        type=str,
+        default="credentials.json",
+        help="Path to Google OAuth credentials file (default: credentials.json)",
+    )
+
     args = parser.parse_args()
 
     # Load config from environment
@@ -117,7 +137,18 @@ Environment Variables:
         # Generate report
         reporter = PortfolioReporter(client)
 
-        if args.json:
+        if args.sheets:
+            from sheets_exporter import export_to_sheets
+
+            print("Exporting to Google Sheets...")
+            url = export_to_sheets(
+                reporter,
+                spreadsheet_id=args.spreadsheet_id,
+                credentials_path=args.credentials,
+            )
+            print(f"Portfolio exported successfully!")
+            print(f"View it here: {url}")
+        elif args.json:
             report = reporter.generate_json_report()
             print(json.dumps(report, indent=2))
         else:

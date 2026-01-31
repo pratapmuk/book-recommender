@@ -3,6 +3,8 @@
 *.pem
 *.key
 private_key*
+credentials.json
+token.json
 
 # Python
 __pycache__/

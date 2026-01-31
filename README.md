@@ -8,6 +8,7 @@ A command-line tool to view your Kalshi portfolio value and positions.
 - List all open positions with market details
 - See realized P&L for each position
 - Output as formatted text or JSON
+- **Export to Google Sheets**
 - Support for both production and demo APIs
 
 ## Prerequisites
@@ -119,7 +120,41 @@ python main.py --demo
 
 # Override credentials via command line
 python main.py --api-key YOUR_KEY_ID --private-key /path/to/key.pem
+
+# Export to Google Sheets
+python main.py --sheets
+
+# Update an existing spreadsheet
+python main.py --sheets --spreadsheet-id YOUR_SPREADSHEET_ID
 ```
+
+### Google Sheets Export
+
+Export your portfolio directly to a Google Sheets spreadsheet:
+
+```bash
+python main.py --sheets
+```
+
+**First-time setup for Google Sheets:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Enable the **Google Sheets API**:
+   - Go to "APIs & Services" → "Library"
+   - Search for "Google Sheets API" and enable it
+4. Create OAuth credentials:
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Choose "Desktop app" as application type
+   - Download the JSON file
+   - Save it as `credentials.json` in the project folder
+5. Run `python main.py --sheets`
+   - A browser window will open for Google authentication
+   - Grant the app permission to access Google Sheets
+   - Your token will be saved for future use
+
+The first time you run with `--sheets`, a browser will open to authenticate. After that, it will remember your credentials.
 
 ### JSON Output
 
@@ -163,6 +198,7 @@ python main.py --json
 ├── main.py               # CLI entry point
 ├── kalshi_client.py      # Kalshi API client with RSA auth
 ├── portfolio_reporter.py # Portfolio data formatting
+├── sheets_exporter.py    # Google Sheets export functionality
 ├── requirements.txt      # Python dependencies
 ├── .env.example          # Example environment configuration
 ├── .gitignore           # Git ignore rules
@@ -173,7 +209,8 @@ python main.py --json
 
 - **Never commit your private key** to version control
 - **Never share your API Key ID** publicly
-- The `.gitignore` is configured to exclude `.env`, `.pem`, and `.key` files
+- **Never commit `credentials.json` or `token.json`** (Google OAuth files)
+- The `.gitignore` is configured to exclude `.env`, `.pem`, `.key`, and credential files
 - Consider using a secrets manager for production deployments
 
 ## Troubleshooting
