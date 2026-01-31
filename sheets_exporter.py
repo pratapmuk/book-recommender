@@ -121,50 +121,22 @@ class SheetsExporter:
             spreadsheet_id = self.create_spreadsheet(title)
             append = False  # New sheet, no need to append
 
-        # Prepare the data rows
+        # Prepare the data rows - only position rows
         values = []
 
-        if append:
-            # Add separator and timestamp for appended data
-            values.append([])
-            values.append(["---"])
-            values.append([f"UPDATE: {timestamp}"])
-        else:
-            # Header section for new sheet
-            values.append(["KALSHI PORTFOLIO REPORT"])
-            values.append([f"Generated: {timestamp}"])
-        values.append([])
+        for pos in data["positions"]:
+            pnl = pos["realized_pnl_dollars"]
+            pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
 
-        # Balance section
-        values.append(["ACCOUNT BALANCE"])
-        values.append(["Available Balance", f"${data['balance']['available_balance_dollars']:,.2f}"])
-        values.append(["Portfolio Value", f"${data['balance']['portfolio_value_dollars']:,.2f}"])
-        values.append(["Total Value", f"${data['balance']['total_value_dollars']:,.2f}"])
-        values.append([])
-
-        # Positions section
-        values.append([f"OPEN POSITIONS ({data['position_count']})"])
-
-        if data["positions"]:
-            # Header row
-            values.append(["Ticker", "Market", "Position", "Contracts", "Exposure", "Realized P&L", "Timestamp"])
-
-            # Position rows
-            for pos in data["positions"]:
-                pnl = pos["realized_pnl_dollars"]
-                pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
-
-                values.append([
-                    pos["ticker"],
-                    pos["market_title"],
-                    pos["position_type"],
-                    pos["contracts"],
-                    pos["market_exposure_dollars"],
-                    pnl_str,
-                    timestamp,
-                ])
-        else:
-            values.append(["No open positions"])
+            values.append([
+                pos["ticker"],
+                pos["market_title"],
+                pos["position_type"],
+                pos["contracts"],
+                pos["market_exposure_dollars"],
+                pnl_str,
+                timestamp,
+            ])
 
         # Write to sheet
         body = {"values": values}
