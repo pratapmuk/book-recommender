@@ -115,11 +115,16 @@ class SheetsExporter:
         data = reporter.generate_json_report()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Calculate total exposure
+        total_exposure = sum(pos["market_exposure_dollars"] for pos in data["positions"])
+
         # Create new spreadsheet if needed
+        is_new_sheet = False
         if not spreadsheet_id:
             title = f"Kalshi Portfolio - {datetime.now().strftime('%Y-%m-%d')}"
             spreadsheet_id = self.create_spreadsheet(title)
             append = False  # New sheet, no need to append
+            is_new_sheet = True
 
         # Prepare the data rows - only position rows
         values = []
@@ -145,7 +150,7 @@ class SheetsExporter:
             # Append below existing data
             self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range="A1",
+                range="Sheet1!A1",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body=body,
@@ -154,7 +159,7 @@ class SheetsExporter:
             # Overwrite from the beginning
             self.service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range="A1",
+                range="Sheet1!A1",
                 valueInputOption="RAW",
                 body=body,
             ).execute()
@@ -162,7 +167,148 @@ class SheetsExporter:
             # Format the spreadsheet (only on new sheets)
             self._apply_formatting(spreadsheet_id, len(values))
 
+        # Update summary sheet with total exposure
+        self._update_summary_sheet(spreadsheet_id, timestamp, total_exposure, is_new_sheet)
+
         return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+
+    def _get_or_create_summary_sheet(self, spreadsheet_id: str) -> int:
+        """Get the Summary sheet ID, creating it if it doesn't exist."""
+        # Get spreadsheet metadata
+        spreadsheet = self.service.spreadsheets().get(
+            spreadsheetId=spreadsheet_id
+        ).execute()
+
+        # Check if Summary sheet exists
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == "Summary":
+                return sheet["properties"]["sheetId"]
+
+        # Create Summary sheet
+        requests = [{
+            "addSheet": {
+                "properties": {
+                    "title": "Summary",
+                    "index": 1,
+                }
+            }
+        }]
+
+        result = self.service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+
+        return result["replies"][0]["addSheet"]["properties"]["sheetId"]
+
+    def _update_summary_sheet(
+        self,
+        spreadsheet_id: str,
+        timestamp: str,
+        total_exposure: float,
+        is_new_sheet: bool,
+    ) -> None:
+        """Update the Summary sheet with total exposure data and chart."""
+        summary_sheet_id = self._get_or_create_summary_sheet(spreadsheet_id)
+
+        # Check if this is the first entry (need to add header)
+        result = self.service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range="Summary!A1:B1"
+        ).execute()
+
+        values = result.get("values", [])
+        need_header = len(values) == 0
+
+        # Prepare data to append
+        rows_to_add = []
+        if need_header:
+            rows_to_add.append(["Timestamp", "Total Exposure"])
+
+        rows_to_add.append([timestamp, total_exposure])
+
+        # Append to Summary sheet
+        self.service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range="Summary!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": rows_to_add},
+        ).execute()
+
+        # Create chart if this is a new sheet or first time adding summary
+        if need_header:
+            self._create_exposure_chart(spreadsheet_id, summary_sheet_id)
+
+    def _create_exposure_chart(self, spreadsheet_id: str, sheet_id: int) -> None:
+        """Create a line chart showing total exposure over time."""
+        requests = [{
+            "addChart": {
+                "chart": {
+                    "spec": {
+                        "title": "Total Exposure Over Time",
+                        "basicChart": {
+                            "chartType": "LINE",
+                            "legendPosition": "BOTTOM_LEGEND",
+                            "axis": [
+                                {
+                                    "position": "BOTTOM_AXIS",
+                                    "title": "Timestamp"
+                                },
+                                {
+                                    "position": "LEFT_AXIS",
+                                    "title": "Total Exposure ($)"
+                                }
+                            ],
+                            "domains": [{
+                                "domain": {
+                                    "sourceRange": {
+                                        "sources": [{
+                                            "sheetId": sheet_id,
+                                            "startRowIndex": 0,
+                                            "endRowIndex": 1000,
+                                            "startColumnIndex": 0,
+                                            "endColumnIndex": 1,
+                                        }]
+                                    }
+                                }
+                            }],
+                            "series": [{
+                                "series": {
+                                    "sourceRange": {
+                                        "sources": [{
+                                            "sheetId": sheet_id,
+                                            "startRowIndex": 0,
+                                            "endRowIndex": 1000,
+                                            "startColumnIndex": 1,
+                                            "endColumnIndex": 2,
+                                        }]
+                                    }
+                                },
+                                "targetAxis": "LEFT_AXIS",
+                            }],
+                            "headerCount": 1,
+                        }
+                    },
+                    "position": {
+                        "overlayPosition": {
+                            "anchorCell": {
+                                "sheetId": sheet_id,
+                                "rowIndex": 1,
+                                "columnIndex": 3,
+                            },
+                            "widthPixels": 600,
+                            "heightPixels": 400,
+                        }
+                    }
+                }
+            }
+        }]
+
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
 
     def _apply_formatting(self, spreadsheet_id: str, num_rows: int) -> None:
         """Apply basic formatting to the spreadsheet."""
