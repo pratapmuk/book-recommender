@@ -57,7 +57,7 @@ def fetch_politics_markets(client: KalshiClient, debug: bool = False) -> list[di
     all_markets = []
     cursor = None
     page = 0
-    seen_categories = set()
+    seen_prefixes = set()
 
     # Fetch all open markets (we'll filter for politics)
     while True:
@@ -67,47 +67,41 @@ def fetch_politics_markets(client: KalshiClient, debug: bool = False) -> list[di
         result = client.get_markets(limit=100, cursor=cursor, status="open")
         markets = result.get("markets", [])
 
-        # Debug: print first market's fields on first page
-        if debug and page == 1 and markets:
-            print("\n  Sample market fields:")
-            sample = markets[0]
-            for key in sorted(sample.keys()):
-                print(f"    {key}: {sample.get(key)}")
-            print()
-
         politics_count = 0
 
         for market in markets:
-            # Collect all categories for debugging
-            category = market.get("category", "")
-            if category:
-                seen_categories.add(category)
-
-            series_ticker = market.get("series_ticker", "")
             event_ticker = market.get("event_ticker", "")
             title = market.get("title", "").lower()
+            ticker = market.get("ticker", "")
 
-            # Filter for politics-related markets - check title and all identifiers
+            # Collect event ticker prefixes for debugging
+            if event_ticker and "-" in event_ticker:
+                prefix = event_ticker.split("-")[0]
+                seen_prefixes.add(prefix)
+
+            # Filter for politics-related markets
             is_politics = (
-                "politic" in category.lower()
-                or "election" in category.lower()
-                or "congress" in category.lower()
-                or "president" in category.lower()
-                or "senate" in category.lower()
-                or "house" in category.lower()
-                or "trump" in title
+                "trump" in title
                 or "biden" in title
                 or "republican" in title
                 or "democrat" in title
-                or "gop" in title
+                or "gop " in title
                 or "electoral" in title
-                or series_ticker.startswith("PRES")
-                or series_ticker.startswith("SENATE")
-                or series_ticker.startswith("HOUSE")
-                or series_ticker.startswith("GOV")
-                or "KXPOLITICS" in series_ticker.upper()
-                or "KXPOLITICS" in event_ticker.upper()
-                or "POLITICS" in event_ticker.upper()
+                or "senate" in title
+                or "congress" in title
+                or "governor" in title
+                or "election" in title
+                or "president" in title
+                or "white house" in title
+                or event_ticker.startswith("KXPRES")
+                or event_ticker.startswith("KXSENATE")
+                or event_ticker.startswith("KXHOUSE")
+                or event_ticker.startswith("KXGOV")
+                or event_ticker.startswith("KXPOLITICS")
+                or event_ticker.startswith("KXELECTION")
+                or ticker.startswith("PRES")
+                or ticker.startswith("SENATE")
+                or ticker.startswith("HOUSE")
             )
 
             if is_politics:
@@ -140,9 +134,9 @@ def fetch_politics_markets(client: KalshiClient, debug: bool = False) -> list[di
         if not cursor or not markets:
             break
 
-    # Print all unique categories found
-    if debug and seen_categories:
-        print(f"\n  All categories found: {sorted(seen_categories)}")
+    # Print all unique event ticker prefixes found
+    if debug and seen_prefixes:
+        print(f"\n  Event ticker prefixes found: {sorted(seen_prefixes)}")
 
     return all_markets
 
