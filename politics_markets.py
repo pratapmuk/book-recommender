@@ -49,49 +49,65 @@ def authenticate_sheets(credentials_path: str = "credentials.json", token_path: 
 
 def fetch_markets(client: KalshiClient, limit: int = 100) -> list[dict]:
     """
-    Fetch open markets from Kalshi.
+    Fetch open markets from Kalshi, excluding certain market types.
 
     Args:
         client: KalshiClient instance
-        limit: Maximum number of markets to return
+        limit: Number of filtered markets to return
 
     Returns:
         List of market dictionaries
     """
-    print(f"  Fetching {limit} markets...")
-
-    result = client.get_markets(limit=limit, status="open")
-    markets = result.get("markets", [])
+    print(f"  Fetching {limit} markets (excluding SPORTSMULTIGAMEEXTENDED)...")
 
     all_markets = []
+    cursor = None
+    page = 0
 
-    for market in markets:
-        event_ticker = market.get("event_ticker", "")
-        ticker = market.get("ticker", "")
-        title = market.get("title", "Unknown")
+    while len(all_markets) < limit:
+        page += 1
+        result = client.get_markets(limit=100, cursor=cursor, status="open")
+        markets = result.get("markets", [])
 
-        # Skip multi-game extended sports markets
-        if "SPORTSMULTIGAMEEXTENDED" in event_ticker or "SPORTSMULTIGAMEEXTENDED" in ticker:
-            continue
+        if not markets:
+            break
 
-        # Get the yes/no probabilities
-        yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
-        no_price = 100 - yes_price if yes_price else 50
+        for market in markets:
+            if len(all_markets) >= limit:
+                break
 
-        # Determine highest probability choice
-        if yes_price >= no_price:
-            best_choice = "YES"
-            probability = yes_price
-        else:
-            best_choice = "NO"
-            probability = no_price
+            event_ticker = market.get("event_ticker", "")
+            ticker = market.get("ticker", "")
+            title = market.get("title", "Unknown")
 
-        all_markets.append({
-            "event_ticker": event_ticker,
-            "title": title,
-            "best_choice": best_choice,
-            "probability": probability / 100,  # Convert to decimal
-        })
+            # Skip multi-game extended sports markets
+            if "SPORTSMULTIGAMEEXTENDED" in event_ticker or "SPORTSMULTIGAMEEXTENDED" in ticker:
+                continue
+
+            # Get the yes/no probabilities
+            yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
+            no_price = 100 - yes_price if yes_price else 50
+
+            # Determine highest probability choice
+            if yes_price >= no_price:
+                best_choice = "YES"
+                probability = yes_price
+            else:
+                best_choice = "NO"
+                probability = no_price
+
+            all_markets.append({
+                "event_ticker": event_ticker,
+                "title": title,
+                "best_choice": best_choice,
+                "probability": probability / 100,  # Convert to decimal
+            })
+
+        cursor = result.get("cursor")
+        if not cursor:
+            break
+
+        print(f"    Page {page}: found {len(all_markets)} markets so far...")
 
     return all_markets
 
