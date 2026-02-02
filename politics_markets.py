@@ -67,7 +67,12 @@ def fetch_markets(client: KalshiClient, limit: int = 100) -> list[dict]:
 
     for market in markets:
         event_ticker = market.get("event_ticker", "")
+        ticker = market.get("ticker", "")
         title = market.get("title", "Unknown")
+
+        # Skip multi-game extended sports markets
+        if "SPORTSMULTIGAMEEXTENDED" in event_ticker or "SPORTSMULTIGAMEEXTENDED" in ticker:
+            continue
 
         # Get the yes/no probabilities
         yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
