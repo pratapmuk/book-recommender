@@ -47,96 +47,46 @@ def authenticate_sheets(credentials_path: str = "credentials.json", token_path: 
     return build("sheets", "v4", credentials=creds)
 
 
-def fetch_politics_markets(client: KalshiClient, debug: bool = False) -> list[dict]:
+def fetch_markets(client: KalshiClient, limit: int = 100) -> list[dict]:
     """
-    Fetch all open Politics markets from Kalshi.
+    Fetch open markets from Kalshi.
+
+    Args:
+        client: KalshiClient instance
+        limit: Maximum number of markets to return
 
     Returns:
-        List of market dictionaries with name, best choice, and probability
+        List of market dictionaries
     """
+    print(f"  Fetching {limit} markets...")
+
+    result = client.get_markets(limit=limit, status="open")
+    markets = result.get("markets", [])
+
     all_markets = []
-    cursor = None
-    page = 0
-    seen_prefixes = set()
 
-    # Fetch all open markets (we'll filter for politics)
-    while True:
-        page += 1
-        print(f"  Fetching page {page}...", end=" ", flush=True)
+    for market in markets:
+        event_ticker = market.get("event_ticker", "")
+        title = market.get("title", "Unknown")
 
-        result = client.get_markets(limit=100, cursor=cursor, status="open")
-        markets = result.get("markets", [])
+        # Get the yes/no probabilities
+        yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
+        no_price = 100 - yes_price if yes_price else 50
 
-        politics_count = 0
+        # Determine highest probability choice
+        if yes_price >= no_price:
+            best_choice = "YES"
+            probability = yes_price
+        else:
+            best_choice = "NO"
+            probability = no_price
 
-        for market in markets:
-            event_ticker = market.get("event_ticker", "")
-            title = market.get("title", "").lower()
-            ticker = market.get("ticker", "")
-
-            # Collect event ticker prefixes for debugging
-            if event_ticker and "-" in event_ticker:
-                prefix = event_ticker.split("-")[0]
-                seen_prefixes.add(prefix)
-
-            # Filter for politics-related markets
-            is_politics = (
-                "trump" in title
-                or "biden" in title
-                or "republican" in title
-                or "democrat" in title
-                or "gop " in title
-                or "electoral" in title
-                or "senate" in title
-                or "congress" in title
-                or "governor" in title
-                or "election" in title
-                or "president" in title
-                or "white house" in title
-                or event_ticker.startswith("KXPRES")
-                or event_ticker.startswith("KXSENATE")
-                or event_ticker.startswith("KXHOUSE")
-                or event_ticker.startswith("KXGOV")
-                or event_ticker.startswith("KXPOLITICS")
-                or event_ticker.startswith("KXELECTION")
-                or ticker.startswith("PRES")
-                or ticker.startswith("SENATE")
-                or ticker.startswith("HOUSE")
-            )
-
-            if is_politics:
-                politics_count += 1
-                # Get the yes/no probabilities
-                yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
-                no_price = 100 - yes_price if yes_price else 50
-
-                # Determine highest probability choice
-                if yes_price >= no_price:
-                    best_choice = "YES"
-                    probability = yes_price
-                else:
-                    best_choice = "NO"
-                    probability = no_price
-
-                all_markets.append({
-                    "ticker": market.get("ticker", ""),
-                    "title": market.get("title", "Unknown"),
-                    "subtitle": market.get("subtitle", ""),
-                    "best_choice": best_choice,
-                    "probability": probability / 100,  # Convert to decimal
-                    "yes_price": yes_price / 100,
-                    "no_price": no_price / 100,
-                })
-
-        print(f"found {politics_count} politics markets")
-
-        cursor = result.get("cursor")
-        if not cursor or not markets:
-            break
-
-    # Print all unique event ticker prefixes found
-    if debug and seen_prefixes:
-        print(f"\n  Event ticker prefixes found: {sorted(seen_prefixes)}")
+        all_markets.append({
+            "event_ticker": event_ticker,
+            "title": title,
+            "best_choice": best_choice,
+            "probability": probability / 100,  # Convert to decimal
+        })
 
     return all_markets
 
@@ -170,19 +120,15 @@ def export_to_sheets(
     values = []
 
     # Header row
-    values.append(["Market Name", "Best Choice", "Probability", "Last Updated"])
+    values.append(["Event Ticker", "Market Name", "Best Choice", "Probability"])
 
     # Market rows
     for market in markets:
-        title = market["title"]
-        if market["subtitle"]:
-            title = f"{title} - {market['subtitle']}"
-
         values.append([
-            title,
+            market["event_ticker"],
+            market["title"],
             market["best_choice"],
             market["probability"],
-            timestamp,
         ])
 
     # Write to sheet
@@ -254,14 +200,10 @@ def main():
             demo=demo_mode,
         )
 
-        # Fetch politics markets (debug=True to see sample data)
-        print("Fetching politics markets...")
-        markets = fetch_politics_markets(client, debug=True)
-        print(f"Found {len(markets)} politics markets")
-
-        if not markets:
-            print("No politics markets found.")
-            sys.exit(0)
+        # Fetch markets
+        print("Fetching markets...")
+        markets = fetch_markets(client, limit=100)
+        print(f"Found {len(markets)} markets")
 
         # Export to Google Sheets
         print("Exporting to Google Sheets...")
