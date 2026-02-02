@@ -85,6 +85,11 @@ def fetch_markets(client: KalshiClient, limit: int = 100, min_liquidity: float =
             if "SPORTSMULTIGAMEEXTENDED" in event_ticker or "SPORTSMULTIGAMEEXTENDED" in ticker:
                 continue
 
+            # Skip markets that are not currently open/active
+            status = market.get("status", "")
+            if status not in ("open", "active"):
+                continue
+
             # Check liquidity (liquidity_dollars is a string like "50000.0000")
             liquidity_str = market.get("liquidity_dollars", "0")
             try:
