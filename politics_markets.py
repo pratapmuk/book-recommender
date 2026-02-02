@@ -56,17 +56,24 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
     """
     all_markets = []
     cursor = None
+    page = 0
 
     # Fetch all open markets (we'll filter for politics)
     while True:
+        page += 1
+        print(f"  Fetching page {page}...", end=" ", flush=True)
+
         result = client.get_markets(limit=100, cursor=cursor, status="open")
         markets = result.get("markets", [])
+
+        politics_count = 0
 
         for market in markets:
             # Check if this is a politics market
             # Politics markets typically have category "Politics" or series starting with certain prefixes
             category = market.get("category", "")
             series_ticker = market.get("series_ticker", "")
+            event_ticker = market.get("event_ticker", "")
 
             # Filter for politics-related markets
             is_politics = (
@@ -81,9 +88,11 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
                 or series_ticker.startswith("HOUSE")
                 or series_ticker.startswith("GOV")
                 or "KXPOLITICS" in series_ticker.upper()
+                or "KXPOLITICS" in event_ticker.upper()
             )
 
             if is_politics:
+                politics_count += 1
                 # Get the yes/no probabilities
                 yes_price = market.get("yes_ask", 0) or market.get("last_price", 50)
                 no_price = 100 - yes_price if yes_price else 50
@@ -105,6 +114,8 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
                     "yes_price": yes_price / 100,
                     "no_price": no_price / 100,
                 })
+
+        print(f"found {politics_count} politics markets")
 
         cursor = result.get("cursor")
         if not cursor or not markets:
