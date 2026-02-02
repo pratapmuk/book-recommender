@@ -47,19 +47,19 @@ def authenticate_sheets(credentials_path: str = "credentials.json", token_path: 
     return build("sheets", "v4", credentials=creds)
 
 
-def fetch_markets(client: KalshiClient, limit: int = 100, min_liquidity: float = 50000) -> list[dict]:
+def fetch_markets(client: KalshiClient, limit: int = 100, min_volume: float = 50000) -> list[dict]:
     """
     Fetch open markets from Kalshi, excluding certain market types.
 
     Args:
         client: KalshiClient instance
         limit: Number of filtered markets to return
-        min_liquidity: Minimum liquidity in dollars
+        min_volume: Minimum volume in dollars
 
     Returns:
         List of market dictionaries
     """
-    print(f"  Fetching {limit} markets (liquidity > ${min_liquidity:,.0f}, excluding SPORTSMULTIGAMEEXTENDED)...")
+    print(f"  Fetching {limit} markets (volume > ${min_volume:,.0f}, excluding SPORTSMULTIGAMEEXTENDED)...")
 
     all_markets = []
     cursor = None
@@ -90,14 +90,17 @@ def fetch_markets(client: KalshiClient, limit: int = 100, min_liquidity: float =
             if status not in ("open", "active"):
                 continue
 
-            # Check liquidity (liquidity_dollars is a string like "50000.0000")
-            liquidity_str = market.get("liquidity_dollars", "0")
-            try:
-                liquidity = float(liquidity_str)
-            except (ValueError, TypeError):
-                liquidity = 0
+            # Check volume (try multiple fields)
+            volume = 0
+            for field in ["volume", "volume_24h", "notional_value"]:
+                try:
+                    val = float(market.get(field, 0) or 0)
+                    if val > volume:
+                        volume = val
+                except (ValueError, TypeError):
+                    pass
 
-            if liquidity < min_liquidity:
+            if volume < min_volume:
                 continue
 
             # Get the yes/no probabilities
@@ -248,7 +251,7 @@ def main():
 
         # Fetch markets
         print("Fetching markets...")
-        markets = fetch_markets(client, limit=100, min_liquidity=50000)
+        markets = fetch_markets(client, limit=100, min_volume=50000)
         print(f"Found {len(markets)} markets")
 
         # Get spreadsheet ID from environment (to append to existing sheet)
