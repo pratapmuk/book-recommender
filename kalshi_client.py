@@ -210,3 +210,69 @@ class KalshiClient:
             Dict containing event information
         """
         return self._make_request("GET", f"/events/{event_ticker}")
+
+    def get_events(
+        self,
+        limit: int = 100,
+        cursor: Optional[str] = None,
+        status: Optional[str] = None,
+        series_ticker: Optional[str] = None,
+        with_nested_markets: bool = True,
+    ) -> dict:
+        """
+        Get all events.
+
+        Args:
+            limit: Maximum number of events to return
+            cursor: Pagination cursor
+            status: Filter by status (e.g., "open", "closed")
+            series_ticker: Filter by series ticker
+            with_nested_markets: Include nested market data
+
+        Returns:
+            Dict containing events and pagination info
+        """
+        params = {"limit": limit, "with_nested_markets": with_nested_markets}
+        if cursor:
+            params["cursor"] = cursor
+        if status:
+            params["status"] = status
+        if series_ticker:
+            params["series_ticker"] = series_ticker
+        return self._make_request("GET", "/events", params=params)
+
+    def get_markets(
+        self,
+        limit: int = 100,
+        cursor: Optional[str] = None,
+        status: Optional[str] = None,
+        event_ticker: Optional[str] = None,
+        series_ticker: Optional[str] = None,
+        tickers: Optional[str] = None,
+    ) -> dict:
+        """
+        Get all markets.
+
+        Args:
+            limit: Maximum number of markets to return
+            cursor: Pagination cursor
+            status: Filter by status (e.g., "open", "closed")
+            event_ticker: Filter by event ticker
+            series_ticker: Filter by series ticker
+            tickers: Comma-separated list of tickers
+
+        Returns:
+            Dict containing markets and pagination info
+        """
+        params = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        if status:
+            params["status"] = status
+        if event_ticker:
+            params["event_ticker"] = event_ticker
+        if series_ticker:
+            params["series_ticker"] = series_ticker
+        if tickers:
+            params["tickers"] = tickers
+        return self._make_request("GET", "/markets", params=params)
