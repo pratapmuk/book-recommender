@@ -47,7 +47,7 @@ def authenticate_sheets(credentials_path: str = "credentials.json", token_path: 
     return build("sheets", "v4", credentials=creds)
 
 
-def fetch_politics_markets(client: KalshiClient) -> list[dict]:
+def fetch_politics_markets(client: KalshiClient, debug: bool = False) -> list[dict]:
     """
     Fetch all open Politics markets from Kalshi.
 
@@ -57,6 +57,7 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
     all_markets = []
     cursor = None
     page = 0
+    seen_categories = set()
 
     # Fetch all open markets (we'll filter for politics)
     while True:
@@ -66,16 +67,27 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
         result = client.get_markets(limit=100, cursor=cursor, status="open")
         markets = result.get("markets", [])
 
+        # Debug: print first market's fields on first page
+        if debug and page == 1 and markets:
+            print("\n  Sample market fields:")
+            sample = markets[0]
+            for key in sorted(sample.keys()):
+                print(f"    {key}: {sample.get(key)}")
+            print()
+
         politics_count = 0
 
         for market in markets:
-            # Check if this is a politics market
-            # Politics markets typically have category "Politics" or series starting with certain prefixes
+            # Collect all categories for debugging
             category = market.get("category", "")
+            if category:
+                seen_categories.add(category)
+
             series_ticker = market.get("series_ticker", "")
             event_ticker = market.get("event_ticker", "")
+            title = market.get("title", "").lower()
 
-            # Filter for politics-related markets
+            # Filter for politics-related markets - check title and all identifiers
             is_politics = (
                 "politic" in category.lower()
                 or "election" in category.lower()
@@ -83,12 +95,19 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
                 or "president" in category.lower()
                 or "senate" in category.lower()
                 or "house" in category.lower()
+                or "trump" in title
+                or "biden" in title
+                or "republican" in title
+                or "democrat" in title
+                or "gop" in title
+                or "electoral" in title
                 or series_ticker.startswith("PRES")
                 or series_ticker.startswith("SENATE")
                 or series_ticker.startswith("HOUSE")
                 or series_ticker.startswith("GOV")
                 or "KXPOLITICS" in series_ticker.upper()
                 or "KXPOLITICS" in event_ticker.upper()
+                or "POLITICS" in event_ticker.upper()
             )
 
             if is_politics:
@@ -120,6 +139,10 @@ def fetch_politics_markets(client: KalshiClient) -> list[dict]:
         cursor = result.get("cursor")
         if not cursor or not markets:
             break
+
+    # Print all unique categories found
+    if debug and seen_categories:
+        print(f"\n  All categories found: {sorted(seen_categories)}")
 
     return all_markets
 
@@ -237,9 +260,9 @@ def main():
             demo=demo_mode,
         )
 
-        # Fetch politics markets
+        # Fetch politics markets (debug=True to see sample data)
         print("Fetching politics markets...")
-        markets = fetch_politics_markets(client)
+        markets = fetch_politics_markets(client, debug=True)
         print(f"Found {len(markets)} politics markets")
 
         if not markets:
