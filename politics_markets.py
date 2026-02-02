@@ -253,7 +253,7 @@ def main():
 
         # Fetch markets
         print("Fetching markets...")
-        markets = fetch_markets(client, limit=100, min_volume=50000)
+        markets = fetch_markets(client, limit=20, min_volume=50000)
         print(f"Found {len(markets)} markets")
 
         # Get spreadsheet ID from environment (to append to existing sheet)
