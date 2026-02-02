@@ -47,18 +47,19 @@ def authenticate_sheets(credentials_path: str = "credentials.json", token_path: 
     return build("sheets", "v4", credentials=creds)
 
 
-def fetch_markets(client: KalshiClient, limit: int = 100) -> list[dict]:
+def fetch_markets(client: KalshiClient, limit: int = 100, min_liquidity: float = 50000) -> list[dict]:
     """
     Fetch open markets from Kalshi, excluding certain market types.
 
     Args:
         client: KalshiClient instance
         limit: Number of filtered markets to return
+        min_liquidity: Minimum liquidity in dollars
 
     Returns:
         List of market dictionaries
     """
-    print(f"  Fetching {limit} markets (excluding SPORTSMULTIGAMEEXTENDED)...")
+    print(f"  Fetching {limit} markets (liquidity > ${min_liquidity:,.0f}, excluding SPORTSMULTIGAMEEXTENDED)...")
 
     all_markets = []
     cursor = None
@@ -82,6 +83,16 @@ def fetch_markets(client: KalshiClient, limit: int = 100) -> list[dict]:
 
             # Skip multi-game extended sports markets
             if "SPORTSMULTIGAMEEXTENDED" in event_ticker or "SPORTSMULTIGAMEEXTENDED" in ticker:
+                continue
+
+            # Check liquidity (liquidity_dollars is a string like "50000.0000")
+            liquidity_str = market.get("liquidity_dollars", "0")
+            try:
+                liquidity = float(liquidity_str)
+            except (ValueError, TypeError):
+                liquidity = 0
+
+            if liquidity < min_liquidity:
                 continue
 
             # Get the yes/no probabilities
@@ -118,32 +129,29 @@ def export_to_sheets(
     credentials_path: str = "credentials.json",
 ) -> str:
     """
-    Export politics markets to Google Sheets.
+    Export markets to Google Sheets.
 
     Args:
         markets: List of market data dictionaries
-        spreadsheet_id: Existing spreadsheet ID, or None to create new
+        spreadsheet_id: Existing spreadsheet ID to append to, or None to create new
         credentials_path: Path to Google OAuth credentials
 
     Returns:
         URL to the spreadsheet
     """
     service = authenticate_sheets(credentials_path)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Create new spreadsheet if needed
+    is_new = False
     if not spreadsheet_id:
-        spreadsheet = {"properties": {"title": f"Kalshi Politics Markets - {datetime.now().strftime('%Y-%m-%d')}"}}
+        spreadsheet = {"properties": {"title": f"Kalshi Markets - {datetime.now().strftime('%Y-%m-%d')}"}}
         result = service.spreadsheets().create(body=spreadsheet, fields="spreadsheetId").execute()
         spreadsheet_id = result.get("spreadsheetId")
+        is_new = True
 
-    # Prepare the data rows
+    # Prepare the data rows (no header when appending)
     values = []
 
-    # Header row
-    values.append(["Event Ticker", "Market Name", "Best Choice", "Probability"])
-
-    # Market rows
     for market in markets:
         values.append([
             market["event_ticker"],
@@ -152,50 +160,62 @@ def export_to_sheets(
             market["probability"],
         ])
 
-    # Write to sheet
     body = {"values": values}
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range="A1",
-        valueInputOption="RAW",
-        body=body,
-    ).execute()
 
-    # Format the spreadsheet
-    requests = [
-        # Bold header row
-        {
-            "repeatCell": {
-                "range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1},
-                "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                "fields": "userEnteredFormat.textFormat",
-            }
-        },
-        # Auto-resize columns
-        {
-            "autoResizeDimensions": {
-                "dimensions": {
-                    "sheetId": 0,
-                    "dimension": "COLUMNS",
-                    "startIndex": 0,
-                    "endIndex": 4,
+    if is_new:
+        # Add header row for new sheet
+        header = [["Event Ticker", "Market Name", "Best Choice", "Probability"]]
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range="A1",
+            valueInputOption="RAW",
+            body={"values": header},
+        ).execute()
+
+        # Write data starting at row 2
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range="A2",
+            valueInputOption="RAW",
+            body=body,
+        ).execute()
+
+        # Format the spreadsheet
+        requests = [
+            # Bold header row
+            {
+                "repeatCell": {
+                    "range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1},
+                    "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                    "fields": "userEnteredFormat.textFormat",
                 }
-            }
-        },
-        # Format probability column as percentage
-        {
-            "repeatCell": {
-                "range": {"sheetId": 0, "startRowIndex": 1, "endRowIndex": len(values), "startColumnIndex": 2, "endColumnIndex": 3},
-                "cell": {"userEnteredFormat": {"numberFormat": {"type": "PERCENT", "pattern": "0.0%"}}},
-                "fields": "userEnteredFormat.numberFormat",
-            }
-        },
-    ]
+            },
+            # Auto-resize columns
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": 0,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 4,
+                    }
+                }
+            },
+        ]
 
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": requests}
-    ).execute()
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+    else:
+        # Append to existing sheet
+        service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range="A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body=body,
+        ).execute()
 
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
 
@@ -223,12 +243,19 @@ def main():
 
         # Fetch markets
         print("Fetching markets...")
-        markets = fetch_markets(client, limit=100)
+        markets = fetch_markets(client, limit=100, min_liquidity=50000)
         print(f"Found {len(markets)} markets")
 
+        # Get spreadsheet ID from environment (to append to existing sheet)
+        spreadsheet_id = os.getenv("KALSHI_MARKETS_SPREADSHEET_ID")
+
         # Export to Google Sheets
-        print("Exporting to Google Sheets...")
-        url = export_to_sheets(markets)
+        if spreadsheet_id:
+            print(f"Appending to existing Google Sheet...")
+        else:
+            print("Creating new Google Sheet...")
+
+        url = export_to_sheets(markets, spreadsheet_id=spreadsheet_id)
         print(f"Exported successfully!")
         print(f"View it here: {url}")
 
