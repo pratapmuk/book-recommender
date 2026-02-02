@@ -120,6 +120,7 @@ def fetch_markets(client: KalshiClient, limit: int = 100, min_volume: float = 50
                 "title": title,
                 "best_choice": best_choice,
                 "probability": probability / 100,  # Convert to decimal
+                "volume": volume,
             })
 
         cursor = result.get("cursor")
@@ -166,13 +167,14 @@ def export_to_sheets(
             market["title"],
             market["best_choice"],
             market["probability"],
+            market["volume"],
         ])
 
     body = {"values": values}
 
     if is_new:
         # Add header row for new sheet
-        header = [["Event Ticker", "Market Name", "Best Choice", "Probability"]]
+        header = [["Event Ticker", "Market Name", "Best Choice", "Probability", "Volume"]]
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range="A1",
@@ -205,7 +207,7 @@ def export_to_sheets(
                         "sheetId": 0,
                         "dimension": "COLUMNS",
                         "startIndex": 0,
-                        "endIndex": 4,
+                        "endIndex": 5,
                     }
                 }
             },
